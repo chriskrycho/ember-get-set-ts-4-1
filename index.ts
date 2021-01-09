@@ -37,6 +37,19 @@ type AnyPathIn<
       : Join<K, AnyPathIn<Unproxied<Unproxied<T>[K]>>>)
   : never;
 
+// Utility type which performs the actual recursive logic for `PropType`, so
+// that `PropType` can just handle the top-level dispatch of nullable vs.
+// non-nullable types *into* the `Inner` handler.
+// prettier-ignore
+type Inner<T, Path extends string> =
+  string extends Path ? unknown :
+  Path extends keyof Unproxied<T> ? Unproxied<Unproxied<T>[Path]> :
+  Path extends `${infer K}.${infer R}` ?
+    K extends keyof Unproxied<T>
+    ? PropType<Unproxied<Unproxied<T>[K]>, R>
+    : unknown
+  : unknown;
+
 /**
  * Given a type `T` and a `Path` which is a string, look up the nested value for
  * the path.
@@ -62,25 +75,10 @@ type AnyPathIn<
  * Here `Bottom` will be a `string`.
  */
 // prettier-ignore
-type Inner<T, Path extends string> =
-  string extends Path ? unknown :
-  Path extends keyof Unproxied<T> ? Unproxied<Unproxied<T>[Path]> :
-  Path extends `${infer K}.${infer R}` ?
-    K extends keyof Unproxied<T>
-    ? PropType<Unproxied<Unproxied<T>[K]>, R>
-    : unknown
-  : unknown;
-
-// prettier-ignore
 type PropType<T, Path extends string> =
-  T extends ObjectProxy<any>
-    ? Unproxied<T> extends null | undefined
-      ? Inner<NonNullable<Unproxied<T>>, Path> | undefined
-      : Inner<Unproxied<T>, Path>
-    : T extends null | undefined
-      ? Inner<NonNullable<T>, Path> | undefined
-      : Inner<T, Path>
-  ;
+  T extends null | undefined
+    ? Inner<NonNullable<T>, Path> | undefined
+    : Inner<T, Path>;
 
 type Test = {
   a?: string;
@@ -194,9 +192,51 @@ declare let nestedProxies: ObjectProxy<{
   }>;
 }>;
 nestedProxies.get("top.middle.bottom").length; // 🎉
-get(nestedProxies, "top.middle.bottom").length; // 🎉
+get(nestedProxies, "top.middle.bottom.length") * 2; // 🎉
 
 type PropsIn<T, K extends AnyPathIn<T>> = Pick<{ [P in K]: PropType<T, P> }, K>;
+
+declare class EmberObject {
+  get<K extends AnyPathIn<this>>(key: K): PropType<this, K>;
+  get(key: string): unknown;
+
+  static create<T extends object>(props: T): EmberObject & T;
+}
+
+class Complicated {
+  justAString?: string;
+
+  aNestedObject?: {
+    stringProp: string;
+    optionalNumberProp?: number;
+  } = { stringProp: "cool" };
+
+  ["and.even.this"]: boolean;
+}
+
+let complicated = new Complicated();
+let itTypeChecks =
+  (get(complicated, "justAString.length") ?? 0) +
+  (get(complicated, "aNestedObject.stringProp.length") ?? 0) +
+  (get(complicated, "aNestedObject.optionalNumberProp") ?? 0) +
+  (get(complicated, "and.even.this") ? 42 : -12);
+
+let f = EmberObject.create({
+  "waffles.yum": true,
+  neato: { potato: "cool cool" } as { potato: string } | undefined,
+});
+let fnl = f.get("neato.potato.length") * 2;
+let fnla = (f.get("neato.potato.length") ?? 0) * 2;
+let w = f.get("waffles.yum");
+
+class G extends EmberObject {
+  whatUp = "my young youngs";
+
+  get heyo() {
+    type X = Unproxied<this>;
+    return get(this, "whatUp");
+  }
+}
 
 // This is a "pretend" version of the `@ember-data/model` class, with everything
 // stripped away except that it has an `id` on it.
@@ -222,7 +262,8 @@ class SomeModel extends EmberDataModel {
   declare aBelongsTo: ObjectProxy<AnotherModel>;
 
   get derived(): number {
-    this.get("aLocalAttr");
+    let x =
+      this.aBelongsTo.get("itsOwnRelationship.withAnotherAttr.length") ?? 0;
 
     return aLocalAttr?.length ?? 0;
   }
