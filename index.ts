@@ -32,9 +32,9 @@ export type AnyPathIn<
   K extends keyof Unproxied<T> = keyof Unproxied<T>
 > = K extends string
   ? | K
-    | (Unproxied<Unproxied<T>[K]> extends infer U | null | undefined
+    | (Unproxied<T>[K] extends infer U | null | undefined
       ? Join<K, AnyPathIn<U>>
-      : Join<K, AnyPathIn<Unproxied<Unproxied<T>[K]>>>)
+      : Join<K, AnyPathIn<Unproxied<T>[K]>>)
   : never;
 
 // Utility type which performs the actual recursive logic for `PropType`, so
@@ -46,7 +46,7 @@ type Inner<T, Path extends string> =
   Path extends keyof Unproxied<T> ? Unproxied<Unproxied<T>[Path]> :
   Path extends `${infer K}.${infer R}` ?
     K extends keyof Unproxied<T>
-    ? PropType<Unproxied<Unproxied<T>[K]>, R>
+    ? PropType<Unproxied<T>[K], R>
     : unknown
   : unknown;
 
@@ -127,13 +127,13 @@ type Unproxied<T> = T extends ObjectProxy<infer U> ? U : T;
 
 export declare class EmberObject {
   get<K extends AnyPathIn<this>>(key: K): PropType<this, K>;
-  get(key: string): unknown;
+  // get(key: string): unknown;
 
   static create<T extends object>(props: T): EmberObject & T;
 }
 
 // This is a "pretend" version of the `@ember-data/model` class, with everything
 // stripped away except that it has an `id` on it.
-export declare class EmberDataModel {
+export declare class EmberDataModel extends EmberObject {
   id: string;
 }
