@@ -4,6 +4,8 @@ This is just a demo of how we can implement robust types for Ember's `get` and `
 
 ![demo of deep autocompletion on an `EmberObject`](./demo.png)
 
+To see it in action, check out [the ~4½-minute demo video](./demo.mov)—or, better, clone this repo and mess around with `demo.ts`!
+
 This correctly handles a number of significant "edge cases" over the base example shown in the original PR adding this feature to TS and the blog post announcement:
 
 - If any type in the path is `null | undefined`, this approach resolves the final type to include that correctly. For example, given an item `foo: { bar?: string }`, doing `get(foo, 'bar.length')` will have the type `number | undefined`, since `bar` may be undefined.
