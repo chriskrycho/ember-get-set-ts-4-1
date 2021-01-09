@@ -27,7 +27,7 @@ type Join<K extends string, L extends string> = `${K}.${L}`;
  * to *other* type-level functions.
  */
 // prettier-ignore
-type AnyPathIn<
+export type AnyPathIn<
   T extends unknown,
   K extends keyof Unproxied<T> = keyof Unproxied<T>
 > = K extends string
@@ -75,93 +75,48 @@ type Inner<T, Path extends string> =
  * Here `Bottom` will be a `string`.
  */
 // prettier-ignore
-type PropType<T, Path extends string> =
+export type PropType<T, Path extends string> =
   T extends null | undefined
     ? Inner<NonNullable<T>, Path> | undefined
     : Inner<T, Path>;
 
-type Test = {
-  a?: string;
-  z: string;
-  b: ObjectProxy<string>;
-  c: {
-    a: string;
-    b?: ObjectProxy<string>;
-  };
-  d: {
-    a: {
-      a: string;
-    };
-    b?: ObjectProxy<{
-      a: string;
-    }>;
-  };
-};
-
-type ResolvedPath = AnyPathIn<Test>;
-type In<A, Cond> = A extends Cond ? true : false;
-type A = In<"a.length", ResolvedPath>;
-type B = In<"z.length", ResolvedPath>;
-type ResolvedType = PropType<Test, "a.length">;
-
 // We can now define type-safe versions of Ember's `get` and `set` helpers!
 // These have the *exact* same semantics as those do, but are type-safe and will
 // provide completions.
-declare function get<T, K extends AnyPathIn<T>>(
+export declare function get<T, K extends AnyPathIn<T>>(
   obj: T,
   path: K
 ): PropType<T, K>;
 
-declare function getProperties<T, K extends AnyPathIn<T>>(
+type PropsIn<T, K extends AnyPathIn<T>> = Pick<{ [P in K]: PropType<T, P> }, K>;
+
+export declare function getProperties<T, K extends AnyPathIn<T>>(
   obj: T,
   paths: K[]
 ): PropsIn<T, K>;
-declare function getProperties<T, K extends AnyPathIn<T>>(
+export declare function getProperties<T, K extends AnyPathIn<T>>(
   obj: T,
   ...paths: K[]
 ): PropsIn<T, K>;
 
-declare function set<T, P extends AnyPathIn<T>>(
+export declare function set<T, P extends AnyPathIn<T>>(
   obj: T,
   path: P,
   value: PropType<T, P>
 ): PropType<T, P>;
 
-declare function setProperties<
+export declare function setProperties<
   T,
   Keys extends AnyPathIn<T>,
   Props extends Partial<{ [K in Keys]: PropType<T, K> }>
 >(obj: T, properties: Props): Props;
-
-// Given deeply nested objects, we can get autocompletion help *and* type safety
-// against typos etc.:
-declare let deeplyNested: { top: { middle: { bottom: string } } };
-let doubleLength = get(deeplyNested, "top.middle.bottom.length") * 2;
-get(deeplyNested, "top.middle.bottom.length") * 2;
-set(deeplyNested, "top.middle", { bottom: "cool" });
-set(deeplyNested, "top", { middle: { bottom: "wow" } });
-set(deeplyNested, "top.middle.bottom", "amaze");
-get(deeplyNested, "nonsense");
-get(deeplyNested, "nonsense.at.any.level");
-get(deeplyNested, "top.middle.even.if.starts.legit");
-
-declare let nestedAndMultiple: {
-  topA: { middleA: string };
-  topB: number;
-  topC: string;
-};
-
-let { topA, topB } = getProperties(nestedAndMultiple, "topA", "topB");
-let total = topA.middleA.length + topB;
-
-setProperties(nestedAndMultiple, { topB: 12, topC: "hello" });
 
 // The real `ObjectProxy` in Ember is a bit more complicated than this, but this
 // will do to get the idea across. It has `get` and `set` methods on it which
 // allow you to deeply get or set items which may or may not have been proxied
 // (just as the real `Ember.get` and `Ember.set` methods do, and using the same
 // means as the `get` above does).
-interface ObjectProxy<T> {
+export interface ObjectProxy<T> {
   get<K extends AnyPathIn<T>>(key: K): PropType<T, K>;
   set<K extends AnyPathIn<T>>(key: K, value: PropType<T, K>): void;
 }
@@ -170,130 +125,15 @@ interface ObjectProxy<T> {
 // `ObjectProxy` as defined above.
 type Unproxied<T> = T extends ObjectProxy<infer U> ? U : T;
 
-// If we actually *have* an instance of an `ObjectProxy`...
-declare let someProxy: ObjectProxy<{ someProp: string }>;
-
-// ...we cannot directly access the fields on it.
-someProxy.someProp; // 😭
-
-// However, we *can* use `get` and then access the result! This works both for
-// the `get` on the object...
-someProxy.get("someProp").length; // 🎉
-
-// ...and the standalone `get`:
-get(someProxy, "someProp").length; // 🎉
-
-// This can go as deeply as we need it to!
-declare let nestedProxies: ObjectProxy<{
-  top: ObjectProxy<{
-    middle: ObjectProxy<{
-      bottom: ObjectProxy<string>;
-    }>;
-  }>;
-}>;
-nestedProxies.get("top.middle.bottom").length; // 🎉
-get(nestedProxies, "top.middle.bottom.length") * 2; // 🎉
-
-type PropsIn<T, K extends AnyPathIn<T>> = Pick<{ [P in K]: PropType<T, P> }, K>;
-
-declare class EmberObject {
+export declare class EmberObject {
   get<K extends AnyPathIn<this>>(key: K): PropType<this, K>;
   get(key: string): unknown;
 
   static create<T extends object>(props: T): EmberObject & T;
 }
 
-class Complicated {
-  justAString?: string;
-
-  aNestedObject?: {
-    stringProp: string;
-    optionalNumberProp?: number;
-  } = { stringProp: "cool" };
-
-  ["and.even.this"]: boolean;
-}
-
-let complicated = new Complicated();
-let itTypeChecks =
-  (get(complicated, "justAString.length") ?? 0) +
-  (get(complicated, "aNestedObject.stringProp.length") ?? 0) +
-  (get(complicated, "aNestedObject.optionalNumberProp") ?? 0) +
-  (get(complicated, "and.even.this") ? 42 : -12);
-
-let f = EmberObject.create({
-  "waffles.yum": true,
-  neato: { potato: "cool cool" } as { potato: string } | undefined,
-});
-let fnl = f.get("neato.potato.length") * 2;
-let fnla = (f.get("neato.potato.length") ?? 0) * 2;
-let w = f.get("waffles.yum");
-
-class G extends EmberObject {
-  whatUp = "my young youngs";
-
-  get heyo() {
-    type X = Unproxied<this>;
-    return get(this, "whatUp");
-  }
-}
-
 // This is a "pretend" version of the `@ember-data/model` class, with everything
 // stripped away except that it has an `id` on it.
-class EmberDataModel {
-  declare id: string;
+export declare class EmberDataModel {
+  id: string;
 }
-
-// Given an Ember Data model subclass, we can treat `ObjectProxy` as a stand-in
-// for things like async relationships (which in fact use `ObjectProxy` under
-// the hood to build out `PromiseObject` and `PromiseArray`.)
-class SomeModel extends EmberDataModel {
-  // imagine these have `@attr('string)` and `@attr('number')` on them
-  declare aLocalAttr: string;
-  declare anotherLocalAttr: number;
-
-  declare aHasMany: ObjectProxy<
-    Array<
-      ObjectProxy<{
-        baz: ObjectProxy<string>;
-      }>
-    >
-  >;
-  declare aBelongsTo: ObjectProxy<AnotherModel>;
-
-  get derived(): number {
-    let x =
-      this.aBelongsTo.get("itsOwnRelationship.withAnotherAttr.length") ?? 0;
-
-    return aLocalAttr?.length ?? 0;
-  }
-}
-
-declare class AnotherModel extends EmberDataModel {
-  itsOwnAttr?: number;
-  itsOwnRelationship: ObjectProxy<YetAnotherModel>;
-}
-
-declare class YetAnotherModel extends EmberDataModel {
-  withAnotherAttr?: string;
-}
-
-// Now, given these "relationships" on a model, we can see all of the patterns
-// working we would expect from Ember. Again: play around with this and see what
-// kinds of errors you get, how autocompletion works, etc.!
-declare let someModel: SomeModel;
-get(someModel, "aHasMany").map((item) => get(item, "baz").length);
-
-let l = get(someModel, "aLocalAttr.length");
-let x = get(someModel, "aHasMany").map((item) => get(item, "baz").length * 2);
-let y = get(someModel, "aBelongsTo.itsOwnRelationship.withAnotherAttr.length");
-
-let { aBelongsTo, aLocalAttr } = getProperties(
-  someModel,
-  "aBelongsTo",
-  "aLocalAttr"
-);
-
-// SUMMARY: while we hopefully won't need these *long*-term, and while they will
-// likely be opt-in when we release them (since they do have some costs and
-// overhead), these advanced types close the last remaining gap
